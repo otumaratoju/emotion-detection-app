@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Detection Web App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Emotion Detection</h1>
+            <p>Upload an image or use your camera to detect emotions</p>
+        </header>
+
+        <main>
+            <div class="user-section">
+                <input type="text" id="username" placeholder="Enter your name" required>
+            </div>
+
+            <div class="upload-section">
+                <h2>Upload Image</h2>
+                <form id="upload-form" enctype="multipart/form-data">
+                    <input type="file" id="image-input" name="image" accept="image/*" required>
+                    <button type="submit">Detect Emotion</button>
+                </form>
+            </div>
+
+            <div class="camera-section">
+                <h2>Live Camera</h2>
+                <div class="video-container">
+                    <video id="video" autoplay playsinline></video>
+                    <button id="capture-btn">Capture</button>
+                    <div id="stream-result"></div>
+                </div>
+            </div>
+
+            <div class="result-section" style="display: none;">
+                <h2>Results</h2>
+                <div class="result-content">
+                    <div class="image-preview">
+                        <img id="preview" src="" alt="Preview">
+                    </div>
+                    <div class="emotion-result">
+                        <p>Detected Emotion: <span id="emotion"></span></p>
+                        <p>Confidence: <span id="confidence"></span>%</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="history-section">
+                <h2>History</h2>
+                <div id="history-content"></div>
+            </div>
+
+            <div class="statistics-section">
+                <h2>Statistics</h2>
+                <div id="statistics-content"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Handle file upload
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            const fileInput = document.getElementById('image-input');
+            const username = document.getElementById('username').value;
+
+            formData.append('image', fileInput.files[0]);
+            formData.append('username', username);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                displayResult(fileInput.files[0], result);
+                updateHistory();
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        // Display the result
+        function displayResult(file, result) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('preview').src = e.target.result;
+                document.getElementById('emotion').textContent = result.emotion;
+                document.getElementById('confidence').textContent = 
+                    (result.confidence * 100).toFixed(2);
+                document.querySelector('.result-section').style.display = 'block';
+            }
+            reader.readAsDataURL(file);
+        }
+
+        // Live camera functionality
+        const video = document.getElementById('video');
+        const captureBtn = document.getElementById('capture-btn');
+
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+            }
+        }
+
+        // Handle video stream
+        let videoStream;
+        async function startVideoStream() {
+            try {
+                const response = await fetch('/video');
+                videoStream = response.body;
+                const reader = videoStream.getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    // Update video frame
+                    const blob = new Blob([value], { type: 'image/jpeg' });
+                    video.src = URL.createObjectURL(blob);
+                }
+            } catch (error) {
+                console.error('Error in video stream:', error);
+            }
+        }
+
+        // Update history
+        async function updateHistory() {
+            const username = document.getElementById('username').value;
+            try {
+                const response = await fetch(`/history?username=${username}`);
+                const history = await response.json();
+                
+                const historyContent = document.getElementById('history-content');
+                historyContent.innerHTML = history.map(item => `
+                    <div class="history-item">
+                        <p>Time: ${new Date(item.timestamp).toLocaleString()}</p>
+                        <p>Emotion: ${item.emotion}</p>
+                        <p>Confidence: ${(item.confidence * 100).toFixed(2)}%</p>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error fetching history:', error);
+            }
+        }
+
+        // Update statistics
+        async function updateStatistics() {
+            try {
+                const response = await fetch('/statistics');
+                const stats = await response.json();
+                
+                const statsContent = document.getElementById('statistics-content');
+                statsContent.innerHTML = `
+                    <p>Total Detections: ${stats.total_detections}</p>
+                    <p>Total Users: ${stats.total_users}</p>
+                    <div class="emotion-distribution">
+                        <h3>Emotion Distribution:</h3>
+                        ${Object.entries(stats.emotion_distribution).map(([emotion, count]) => `
+                            <div class="emotion-stat">
+                                <span>${emotion}: ${count}</span>
+                                <div class="bar" style="width: ${(count/stats.total_detections)*100}%"></div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error fetching statistics:', error);
+            }
+        }
+
+        // Initialize
+        setupCamera();
+        updateHistory();
+        updateStatistics();
+        setInterval(updateStatistics, 30000); // Update stats every 30 seconds
+    </script>
+</body>
+</html>
