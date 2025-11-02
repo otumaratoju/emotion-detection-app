@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Emotion Detection Web App</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
@@ -66,35 +66,104 @@
             e.preventDefault();
             const formData = new FormData();
             const fileInput = document.getElementById('image-input');
-            const username = document.getElementById('username').value;
+            const username = document.getElementById('username').value || 'Anonymous';
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                alert('Please select a file first');
+                return;
+            }
 
             formData.append('image', fileInput.files[0]);
             formData.append('username', username);
 
             try {
+                console.log('Uploading file...');
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData
                 });
-                const result = await response.json();
-                displayResult(fileInput.files[0], result);
+
+                // Log the response status and headers
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+
+                // Try to get the response text first
+                const responseText = await response.text();
+                console.log('Response text:', responseText);
+
+                // Parse the text as JSON if possible
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (parseError) {
+                    console.error('Error parsing JSON:', parseError);
+                    alert('Server response was not in the expected format');
+                    return;
+                }
+
+                if (result.error) {
+                    console.error('Server Error:', result.error);
+                    alert('Error: ' + result.error);
+                    return;
+                }
+
+                // Handle successful result
+                displayResult(fileInput.files[0], result.result || result);
                 updateHistory();
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Network or server error:', error);
+                alert('Error uploading image. Please try again.');
             }
         });
 
         // Display the result
         function displayResult(file, result) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                document.getElementById('preview').src = e.target.result;
-                document.getElementById('emotion').textContent = result.emotion;
-                document.getElementById('confidence').textContent = 
-                    (result.confidence * 100).toFixed(2);
-                document.querySelector('.result-section').style.display = 'block';
+            console.log('Displaying result:', result);
+            
+            if (!result) {
+                console.error('No result provided');
+                alert('Error: No result from emotion detection');
+                return;
             }
-            reader.readAsDataURL(file);
+
+            if (!result.emotion || !result.confidence) {
+                console.error('Invalid result format:', result);
+                alert('Error: Invalid response format from server');
+                return;
+            }
+
+            try {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        const preview = document.getElementById('preview');
+                        const emotionElement = document.getElementById('emotion');
+                        const confidenceElement = document.getElementById('confidence');
+                        const resultSection = document.querySelector('.result-section');
+
+                        preview.src = e.target.result;
+                        emotionElement.textContent = result.emotion;
+                        confidenceElement.textContent = (result.confidence * 100).toFixed(2);
+                        resultSection.style.display = 'block';
+                        
+                        console.log('Result displayed successfully');
+                    } catch (displayError) {
+                        console.error('Error updating DOM:', displayError);
+                        alert('Error displaying result: ' + displayError.message);
+                    }
+                };
+
+                reader.onerror = function(error) {
+                    console.error('Error reading file:', error);
+                    alert('Error reading file. Please try again.');
+                };
+
+                reader.readAsDataURL(file);
+            } catch (error) {
+                console.error('Error in displayResult:', error);
+                alert('Error displaying result: ' + error.message);
+            }
         }
 
         // Live camera functionality
