@@ -1,20 +1,13 @@
 services:
   - type: web
     name: emotion-detection-app
-    env: python
-    buildCommand: |
-      sudo apt-get update -y
-      sudo apt-get install -y libgl1-mesa-glx libglib2.0-0
-      pip install --upgrade pip setuptools wheel
-      pip install --no-cache-dir -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    pythonVersion: 3.10.12
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.12
       - key: PYTHONUNBUFFERED
         value: "true"
-      - key: PIP_OPTIONS
-        value: "--no-cache-dir"
-    scaling:
-      minInstances: 1
-      maxInstances: 1
+    autoDeploy: true
