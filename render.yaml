@@ -1,13 +1,18 @@
 services:
   - type: web
     name: emotion-detection-app
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
-    pythonVersion: 3.10.12
+    env: python
+    region: ohio
+    plan: free
+    buildCommand: |
+      python -m pip install --upgrade pip
+      pip install setuptools wheel
+      pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.12
+        value: 3.9.12
       - key: PYTHONUNBUFFERED
-        value: "true"
-    autoDeploy: true
+        value: true
+      - key: PORT
+        value: 10000
