@@ -9,6 +9,12 @@ from model import EmotionDetector
 
 app = Flask(__name__)
 
+# Error handler for all exceptions
+@app.errorhandler(Exception)
+def handle_exception(e):
+    print(f"Unhandled exception: {str(e)}")
+    return jsonify({'error': 'Internal server error'}), 500
+
 # Configuration
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -58,32 +64,59 @@ def init_db():
 @app.route('/')
 def home():
     """Render the main page"""
+    # Initialize the database
+    init_db()
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_image():
     """Handle image upload and emotion detection"""
-    if 'image' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    
-    file = request.files['image']
-    username = request.form.get('username', 'Anonymous')
-    
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    
-    if file and allowed_file(file.filename):
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+        
+        file = request.files['image']
+        username = request.form.get('username', 'Anonymous')
+        
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+        
+        if not file or not allowed_file(file.filename):
+            return jsonify({'error': 'Invalid file type. Allowed types are: ' + ', '.join(ALLOWED_EXTENSIONS)}), 400
+        
+        # Create absolute path for the upload folder
+        upload_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+        os.makedirs(upload_folder, exist_ok=True)
+        
         # Secure the filename and save the file
         filename = secure_filename(file.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{filename}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+        filepath = os.path.join(upload_folder, filename)
         
         try:
-            # Perform emotion detection
+            file.save(filepath)
+            print(f"File saved successfully at: {filepath}")
+        except Exception as e:
+            print(f"Error saving file: {str(e)}")
+            return jsonify({'error': 'Failed to save file'}), 500
+        
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'File was not saved properly'}), 500
+        
+        # Perform emotion detection
+        try:
             result = emotion_detector.detect_emotion(filepath)
+            print(f"Emotion detection result: {result}")
             
+            if result is None:
+                return jsonify({'error': 'No result from emotion detection'}), 500
+                
+            if 'error' in result:
+                print(f"Error in emotion detection: {result['error']}")
+                return jsonify({'error': result['error']}), 400
+        
+        try:
             # Store the result in database
             conn = sqlite3.connect('emotion_detection.db')
             cursor = conn.cursor()
@@ -97,7 +130,24 @@ def upload_image():
             cursor.execute('''
                 INSERT INTO emotion_results (user_id, image_path, emotion, confidence)
                 VALUES (?, ?, ?, ?)
-            ''', (user_id, filepath, result['emotion'], result['confidence']))
+            ''', (user_id, filepath, result['emotion'], result.get('confidence', 0)))
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'result': result,
+                'image_path': filepath
+            })
+            
+        except sqlite3.Error as e:
+            print(f"Database error: {str(e)}")
+            return jsonify({'error': 'Database error occurred'}), 500
+            
+    except Exception as e:
+        print(f"Error processing upload: {str(e)}")
+        return jsonify({'error': str(e)}), 500
             
             conn.commit()
             conn.close()
@@ -116,7 +166,6 @@ def video():
     """Handle live video streaming"""
     return Response(generate_frames(),
                    mimetype='multipart/x-mixed-replace; boundary=frame')
-
 def generate_frames():
     """Generate video frames with emotion detection"""
     camera = cv2.VideoCapture(0)
@@ -208,6 +257,6 @@ def get_statistics():
     conn.close()
     return jsonify(stats)
 
-if __name__ == '__main__':
+if name == 'main':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)

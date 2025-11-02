@@ -13,8 +13,9 @@ class EmotionDetector:
         if os.path.exists(model_path):
             try:
                 self.model = load_model(model_path)
-            except:
-                print("Error loading model, using default...")
+                print("Successfully loaded pre-trained model")
+            except Exception as e:
+                print(f"Error loading model: {str(e)}, using default...")
         else:
             print("No pre-trained model found, using default model...")
     
@@ -81,18 +82,49 @@ class EmotionDetector:
     
     def detect_emotion(self, image_path):
         """Detect emotion from an image file"""
-        face = self.preprocess_image(image_path)
-        if face is None:
-            return {'error': 'No face detected'}
-        
-        predictions = self.model.predict(face)
-        emotion_index = np.argmax(predictions[0])
-        confidence = float(predictions[0][emotion_index])
-        
-        return {
-            'emotion': self.emotions[emotion_index],
-            'confidence': confidence
-        }
+        try:
+            print(f"Starting emotion detection for image: {image_path}")
+            
+            if not os.path.exists(image_path):
+                print(f"Error: Image file not found at {image_path}")
+                return {'error': 'Image file not found'}
+            
+            print("Loading image...")
+            image = cv2.imread(image_path)
+            if image is None:
+                print("Error: Failed to load image")
+                return {'error': 'Failed to load image'}
+                
+            print("Preprocessing image...")
+            face = self.preprocess_image(image_path)
+            if face is None:
+                print(f"Error: No face detected in image at {image_path}")
+                return {'error': 'No face detected in image'}
+            
+            print("Running prediction...")
+            try:
+                predictions = self.model.predict(face, verbose=0)
+                if predictions is None or len(predictions) == 0:
+                    print("Error: Model prediction failed")
+                    return {'error': 'Model prediction failed'}
+                    
+                emotion_index = np.argmax(predictions[0])
+                confidence = float(predictions[0][emotion_index])
+                
+                result = {
+                    'emotion': self.emotions[emotion_index],
+                    'confidence': confidence
+                }
+                print(f"Successfully detected emotion: {result}")
+                return result
+                
+            except Exception as e:
+                print(f"Error during prediction: {str(e)}")
+                return {'error': f'Error during prediction: {str(e)}'}
+            
+        except Exception as e:
+            print(f"Error detecting emotion: {str(e)}")
+            return {'error': f'Error detecting emotion: {str(e)}'}
     
     def detect_emotion_from_array(self, face_array):
         """Detect emotion from a numpy array (for video stream)"""
