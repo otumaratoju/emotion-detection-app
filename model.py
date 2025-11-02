@@ -1,20 +1,22 @@
 import tensorflow as tf
 import numpy as np
 import cv2
+import os
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Dropout, Flatten
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers.legacy import Adam
 
 class EmotionDetector:
     def __init__(self, model_path='emotion_model.h5'):
         self.emotions = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
-        try:
-            self.model = load_model(model_path)
-        except:
-            print("Training new model...")
-            self.model = self._create_model()
-            self._train_model()
-            self.model.save(model_path)
+        self.model = self._create_model()
+        if os.path.exists(model_path):
+            try:
+                self.model = load_model(model_path)
+            except:
+                print("Error loading model, using default...")
+        else:
+            print("No pre-trained model found, using default model...")
     
     def _create_model(self):
         """Create the CNN model architecture"""
